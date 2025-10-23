@@ -1,0 +1,65 @@
+﻿@model List<LeaveApplication>
+@{
+    ViewBag.Title = "All Leave Applications";
+}
+<style>
+    body {
+        background-color:bisque;
+    }
+</style>
+
+
+    <div class="container my-5">
+        <div class="card shadow-lg">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">All Leave Applications</h3>
+            <div class="mt-4">
+                <a href="/Pdf/ExportLeaves" class="btn btn-success">Download Leaves PDF</a>
+            </div>
+            </div>
+            <div class="card-body bg-light">
+                <table class="table table-bordered table-hover table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Type</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Reason</th>
+                            <th>Applied On</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var leave in Model)
+                        {
+                            <tr>
+                                <td>@leave.FullName</td>
+                                <td>@leave.Email</td>
+                                <td>@leave.LeaveType</td>
+                                <td>@leave.StartDate.ToShortDateString()</td>
+                                <td>@leave.EndDate.ToShortDateString()</td>
+                                <td>@leave.Reason</td>
+                                <td>@leave.AppliedOn.ToString("g")</td>
+                                <td>
+                                    @if (leave.Status == "Pending")
+                                    {
+                                        <form method="post" asp-action="UpdateStatus" asp-controller="Admin" class="d-flex gap-2">
+                                            <input type="hidden" name="id" value="@leave.Id" />
+                                            <button type="submit" name="status" value="Approved" class="btn btn-success btn-sm">Approve</button>
+                                            <button type="submit" name="status" value="Rejected" class="btn btn-danger btn-sm">Reject</button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@leave.Status</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>

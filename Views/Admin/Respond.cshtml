@@ -1,0 +1,45 @@
+﻿@model Complaint
+
+<style>
+    body {
+        background-color: cornflowerblue;
+    }
+</style>
+
+<div class="container my-5">
+    <div class="card shadow-lg">
+        <div class="card-header bg-primary text-white">
+            <h3 class="mb-0">Respond to Complaint</h3>
+        </div>
+        <div class="card-body bg-white">
+            <form asp-action="Respond" method="post">
+                <input type="hidden" asp-for="Id" />
+
+                <div class="mb-3">
+                    <label class="form-label">Subject</label>
+                    <input class="form-control" asp-for="Subject" readonly />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" asp-for="Description" rows="3" readonly></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Admin Response</label>
+                    <textarea class="form-control" asp-for="AdminResponse" rows="4" required placeholder="Enter your response here..."></textarea>
+                </div>
+                <div class="mb-4">
+                    <label asp-for="Status" class="form-label">Status</label>
+                    <select asp-for="Status" class="form-select">
+                        <option value="">-- Select Status --</option>
+                        <option value="Resolved">Resolved</option>
+                        <option value="Rejected">Rejected</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-success">Submit Response</button>
+            </form>
+        </div>
+    </div>
+</div>

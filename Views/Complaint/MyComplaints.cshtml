@@ -1,0 +1,70 @@
+﻿@model List<Complaint>
+
+@{
+    ViewData["Title"] = "My Complaints";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-5">
+    <h2 class="mb-4">📢 My Complaints</h2>
+
+    @if (Model != null && Model.Count > 0)
+    {
+        <table class="table table-bordered table-striped align-middle">
+            <thead class="table-dark text-center">
+                <tr>
+                    <th>Subject</th>
+                    <th>Description</th>
+                    <th>Date Created</th>
+                    <th>Admin Response</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody class="text-center">
+                @foreach (var complaint in Model)
+                {
+                    <tr>
+                        <td>@complaint.Subject</td>
+                        <td>@complaint.Description</td>
+                        <td>@complaint.DateCreated.ToString("dd-MM-yyyy hh:mm tt")</td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(complaint.AdminResponse))
+                            {
+                                <span class="text-success fw-bold">@complaint.AdminResponse</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">Locked</span>
+                            }
+                        </td>
+                        <td>
+                            @if (complaint.Status == "Resolved")
+                            {
+                                <span class="badge bg-success">Resolved</span>
+                            }
+                            else if (complaint.Status == "Rejected")
+                            {
+                                <span class="badge bg-danger">Rejected</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning text-dark">Pending</span>
+                            }
+                        </td>
+                        <td>
+                            <a asp-action="Edit" asp-route-id="@complaint.Id" class="btn btn-sm btn-warning">
+                                ✏️ Edit
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        TempData["ToastMessage"] = "You have not submitted any complaints yet.";
+    }
+</div>
+

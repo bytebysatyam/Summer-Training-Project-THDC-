@@ -1,0 +1,53 @@
+﻿@model Complaint
+
+@{
+    ViewData["Title"] = "Register Complaint";
+    Layout = "~/Views/Shared/_Layout.cshtml"; // Ensure it's using your layout
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-header bg-primary text-white rounded-top-4">
+                    <h4 class="mb-0">Register Your Complaint</h4>
+                </div>
+                <div class="card-body">
+
+                        @* ✅ Success message displayed here *@
+                        @if (ViewBag.Message != null)
+                        {
+                            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                @ViewBag.Message
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        }
+                    <form asp-action="Create" method="post">
+                        <div class="mb-3">
+                            <label asp-for="Subject" class="form-label fw-semibold">Subject</label>
+                            <input asp-for="Subject" class="form-control" placeholder="Enter subject of complaint" />
+                            <span asp-validation-for="Subject" class="text-danger"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Description" class="form-label fw-semibold">Description</label>
+                            <textarea asp-for="Description" class="form-control" rows="4" placeholder="Describe your issue..."></textarea>
+                            <span asp-validation-for="Description" class="text-danger"></span>
+                        </div>
+
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-success px-4">Submit Complaint</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}
+

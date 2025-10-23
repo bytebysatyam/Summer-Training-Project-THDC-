@@ -1,0 +1,61 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - WebPage</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/WebPage.styles.css" asp-append-version="true" />
+</head>
+<body>
+    
+    <div class="container-fluid px-0 mx-0">
+        <main role="main" class="pb-3">
+            @RenderBody()
+        </main>
+    </div>
+
+    
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+
+    <!-- Toast Notification -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100">
+        <div id="toastMessage" class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body"></div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Script -->
+    <script>
+        function showToast(message, type = "success") {
+            const toastEl = document.getElementById('toastMessage');
+            const toastBody = toastEl.querySelector('.toast-body');
+
+            toastEl.classList.remove('bg-success', 'bg-danger', 'bg-info', 'bg-warning');
+            toastEl.classList.add(`bg-${type}`);
+            toastBody.textContent = message;
+
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+        }
+
+        window.onload = function () {
+            const message = '@TempData["ToastMessage"]';
+            const type = '@TempData["ToastType"]' || 'success';
+            if (message) {
+                showToast(message, type);
+            }
+        }
+    </script>
+
+
+
+</body>
+</html>

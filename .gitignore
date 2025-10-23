@@ -1,0 +1,7 @@
+# Visual Studio Solution User Options
+*.suo
+
+# Visual Studio temporary/cache files
+.vs/
+bin/
+obj/
