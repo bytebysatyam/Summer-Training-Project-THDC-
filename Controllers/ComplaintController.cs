@@ -1,6 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.Data;
-using System.Reflection.Emit;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using WebPage.Data;
 using WebPage.Models;
 
@@ -8,107 +7,94 @@ public class ComplaintController : Controller
 {
     private readonly ApplicationDbContext _context;
 
-    public ComplaintController(ApplicationDbContext context)
-    {
-        _context = context;
-    }
+    public ComplaintController(ApplicationDbContext context) => _context = context;
 
-    // GET: Complaint/Create
+    private string? CurrentEmail => HttpContext.Session.GetString("UserEmail");
+    private bool IsLoggedIn => !string.IsNullOrWhiteSpace(CurrentEmail);
+
+    [HttpGet]
     public IActionResult Create()
     {
-        return View();
+        if (!IsLoggedIn) return RedirectToAction("Login", "Account");
+        return View(new Complaint());
     }
 
-    // POST: Complaint/Create
     [HttpPost]
-    public IActionResult Create(Complaint model)
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(Complaint model)
     {
-        if (ModelState.IsValid)
-        {
-            var userEmail = HttpContext.Session.GetString("UserEmail");
-            model.UserEmail = userEmail;
-            model.DateCreated = DateTime.Now;
+        if (!IsLoggedIn) return RedirectToAction("Login", "Account");
 
-            _context.Complaints.Add(model);
-            _context.SaveChanges();
+        ModelState.Remove(nameof(model.UserEmail));
+        ModelState.Remove(nameof(model.Status));
+        ModelState.Remove(nameof(model.AdminResponse));
 
-            TempData["ToastMessage"] = "Complaint submitted successfully!";
-            return RedirectToAction("MyComplaints");
-        }
+        if (!ModelState.IsValid) return View(model);
 
-        return View(model); // Show same form again if model is invalid
+        model.UserEmail = CurrentEmail;
+        model.DateCreated = DateTime.UtcNow;
+        model.Status = "Pending";
+        model.AdminResponse = null;
+
+        _context.Complaints.Add(model);
+        await _context.SaveChangesAsync();
+
+        TempData["ToastMessage"] = "Complaint submitted successfully!";
+        TempData["ToastType"] = "success";
+        return RedirectToAction(nameof(MyComplaints));
     }
 
-    public IActionResult MyComplaints()
+    public async Task<IActionResult> MyComplaints()
     {
-        var email = HttpContext.Session.GetString("UserEmail");
-        if (string.IsNullOrEmpty(email))
-        {
-            return RedirectToAction("Login", "Account"); // user not logged in
-        }
+        if (!IsLoggedIn) return RedirectToAction("Login", "Account");
 
-        var complaints = _context.Complaints
-                                 .Where(c => c.UserEmail == email)
-                                 .ToList();
+        var complaints = await _context.Complaints
+            .Where(c => c.UserEmail == CurrentEmail)
+            .OrderByDescending(c => c.DateCreated)
+            .ToListAsync();
 
         return View(complaints);
     }
 
-    // GET: Complaint/Edit/5
-    public IActionResult Edit(int id)
+    [HttpGet]
+    public async Task<IActionResult> Edit(int id)
     {
-        var complaint = _context.Complaints.FirstOrDefault(c => c.Id == id);
-        if (complaint == null)
-        {
-            return NotFound();
-        }
+        if (!IsLoggedIn) return RedirectToAction("Login", "Account");
 
-        if (!string.IsNullOrEmpty(complaint.AdminResponse))
-        {
-            return BadRequest("You cannot edit this complaint because it has already been responded to by the admin.");
-        }
-
-        var email = HttpContext.Session.GetString("UserEmail");
-        if (complaint.UserEmail != email)
-        {
-            return Unauthorized();
-        }
+        var complaint = await _context.Complaints.FirstOrDefaultAsync(c => c.Id == id);
+        if (complaint == null) return NotFound();
+        if (complaint.UserEmail != CurrentEmail) return Forbid();
+        if (!string.IsNullOrEmpty(complaint.AdminResponse) || complaint.Status != "Pending")
+            return BadRequest("You cannot edit a complaint after an admin has processed it.");
 
         return View(complaint);
     }
 
-    // POST: Complaint/Edit/5
     [HttpPost]
-    public IActionResult Edit(int id, Complaint updatedComplaint)
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, Complaint updatedComplaint)
     {
-        if (id != updatedComplaint.Id)
-        {
-            return BadRequest();
-        }
+        if (!IsLoggedIn) return RedirectToAction("Login", "Account");
+        if (id != updatedComplaint.Id) return BadRequest();
 
-        if (ModelState.IsValid)
-        {
-            var complaint = _context.Complaints.FirstOrDefault(c => c.Id == id);
-            if (complaint == null)
-            {
-                return NotFound();
-            }
+        ModelState.Remove(nameof(updatedComplaint.UserEmail));
+        ModelState.Remove(nameof(updatedComplaint.Status));
+        ModelState.Remove(nameof(updatedComplaint.AdminResponse));
 
-            var email = HttpContext.Session.GetString("UserEmail");
-            if (complaint.UserEmail != email)
-            {
-                return Unauthorized();
-            }
+        if (!ModelState.IsValid) return View(updatedComplaint);
 
-            complaint.Subject = updatedComplaint.Subject;
-            complaint.Description = updatedComplaint.Description;
+        var complaint = await _context.Complaints.FirstOrDefaultAsync(c => c.Id == id);
+        if (complaint == null) return NotFound();
+        if (complaint.UserEmail != CurrentEmail) return Forbid();
+        if (!string.IsNullOrEmpty(complaint.AdminResponse) || complaint.Status != "Pending")
+            return BadRequest("You cannot edit a complaint after an admin has processed it.");
 
-            _context.SaveChanges();
+        complaint.Subject = updatedComplaint.Subject.Trim();
+        complaint.Description = updatedComplaint.Description.Trim();
+        await _context.SaveChangesAsync();
 
-            TempData["ToastMessage"] = "Complaint updated successfully!";
-            return RedirectToAction("MyComplaints");
-        }
-
-        return View(updatedComplaint);
+        TempData["ToastMessage"] = "Complaint updated successfully!";
+        TempData["ToastType"] = "success";
+        return RedirectToAction(nameof(MyComplaints));
     }
 }
