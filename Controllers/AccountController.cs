@@ -31,10 +31,26 @@ namespace WebPage.Controllers
 
             if (user != null)
             {
-                var verification = _passwordHasher.VerifyHashedPassword(user, user.Password, model.Password);
-                if (verification != PasswordVerificationResult.Failed)
+                var verified = false;
+                var needsRehash = false;
+
+                try
                 {
-                    if (verification == PasswordVerificationResult.SuccessRehashNeeded)
+                    var result = _passwordHasher.VerifyHashedPassword(user, user.Password, model.Password);
+                    verified = result != PasswordVerificationResult.Failed;
+                    needsRehash = result == PasswordVerificationResult.SuccessRehashNeeded;
+                }
+                catch (FormatException)
+                {
+                    // Older training databases stored plaintext passwords.
+                    // Accept one successful legacy login, then immediately upgrade it to a hash.
+                    verified = user.Password == model.Password;
+                    needsRehash = verified;
+                }
+
+                if (verified)
+                {
+                    if (needsRehash)
                     {
                         user.Password = _passwordHasher.HashPassword(user, model.Password);
                         await _context.SaveChangesAsync();
@@ -97,7 +113,6 @@ namespace WebPage.Controllers
                 await _context.SaveChangesAsync();
             }
 
-            // Generic response avoids disclosing whether an account exists.
             TempData["ToastMessage"] = "If the account exists, the password has been reset.";
             TempData["ToastType"] = "success";
             return RedirectToAction(nameof(Login));
