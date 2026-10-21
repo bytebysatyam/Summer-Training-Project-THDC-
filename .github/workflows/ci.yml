@@ -47,7 +47,7 @@ jobs:
       - name: Start application
         shell: bash
         run: |
-          nohup dotnet run --project WebPage.csproj --configuration Release --no-build > app.log 2>&1 &
+          nohup dotnet run --project WebPage.csproj --configuration Release --no-build --no-launch-profile --urls http://127.0.0.1:5055 > app.log 2>&1 &
           echo $! > app.pid
           for i in {1..40}; do
             if curl -fsS http://127.0.0.1:5055/Account/Login >/dev/null; then
