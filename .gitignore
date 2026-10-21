@@ -1,7 +1,16 @@
-# Visual Studio Solution User Options
+# Visual Studio / .NET
 *.suo
-
-# Visual Studio temporary/cache files
 .vs/
 bin/
 obj/
+
+# local/user configuration
+appsettings.Local.json
+appsettings.*.local.json
+*.user
+
+# secrets and generated files
+.env
+.env.*
+!.env.example
+*.log
