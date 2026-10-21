@@ -1,7 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using MySqlConnector;
-using System.Data;
 using WebPage.Data;
 using WebPage.Models;
 
@@ -10,41 +9,48 @@ namespace WebPage.Controllers
     public class AccountController : Controller
     {
         private readonly ApplicationDbContext _context;
-        private readonly IConfiguration _configuration;
+        private readonly IPasswordHasher<User> _passwordHasher;
 
-        public AccountController(ApplicationDbContext context, IConfiguration configuration)
+        public AccountController(ApplicationDbContext context, IPasswordHasher<User> passwordHasher)
         {
             _context = context;
-            _configuration = configuration;
+            _passwordHasher = passwordHasher;
         }
 
-        public IActionResult Login()
-        {
-            return View();
-        }
+        [HttpGet]
+        public IActionResult Login() => View();
 
         [HttpPost]
-        public IActionResult Login(LoginViewModel model)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Login(LoginViewModel model)
         {
-            if (!ModelState.IsValid)
-                return View(model);
+            if (!ModelState.IsValid) return View(model);
 
-            var user = _context.Users.FirstOrDefault(u =>
-                u.Email == model.Email && u.Password == model.Password);
+            var email = model.Email.Trim().ToLowerInvariant();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
 
             if (user != null)
             {
-                HttpContext.Session.SetString("UserEmail", user.Email);
-                HttpContext.Session.SetString("UserRole", user.Role ?? "User");
-                HttpContext.Session.SetString("UserName", user.FullName);
+                var verification = _passwordHasher.VerifyHashedPassword(user, user.Password, model.Password);
+                if (verification != PasswordVerificationResult.Failed)
+                {
+                    if (verification == PasswordVerificationResult.SuccessRehashNeeded)
+                    {
+                        user.Password = _passwordHasher.HashPassword(user, model.Password);
+                        await _context.SaveChangesAsync();
+                    }
 
-                TempData["ToastMessage"] = "Login successful!";
-                TempData["ToastType"] = "success";
+                    HttpContext.Session.SetString("UserEmail", user.Email);
+                    HttpContext.Session.SetString("UserRole", user.Role);
+                    HttpContext.Session.SetString("UserName", user.FullName);
 
-                if (user.Role == "Admin")
-                    return RedirectToAction("Dashboard", "Admin");
-                else
-                    return RedirectToAction("Dashboard", "Account");
+                    TempData["ToastMessage"] = "Login successful!";
+                    TempData["ToastType"] = "success";
+
+                    return user.Role == "Admin"
+                        ? RedirectToAction("Dashboard", "Admin")
+                        : RedirectToAction(nameof(Dashboard));
+                }
             }
 
             TempData["ToastMessage"] = "Invalid email or password.";
@@ -55,114 +61,78 @@ namespace WebPage.Controllers
         public IActionResult Dashboard()
         {
             var name = HttpContext.Session.GetString("UserName");
-            if (name == null)
-                return RedirectToAction("Login");
+            if (string.IsNullOrWhiteSpace(name))
+                return RedirectToAction(nameof(Login));
 
             ViewBag.Name = name;
             return View();
         }
 
-        public IActionResult Career()
-        {
-            return View();
-        }
+        public IActionResult Career() => View();
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public IActionResult Logout()
         {
             HttpContext.Session.Clear();
             TempData["ToastMessage"] = "Logged out successfully.";
             TempData["ToastType"] = "info";
-            return RedirectToAction("Login");
+            return RedirectToAction(nameof(Login));
         }
 
-        public IActionResult ForgotPassword()
-        {
-            return View();
-        }
+        [HttpGet]
+        public IActionResult ForgotPassword() => View();
 
         [HttpPost]
-        public IActionResult ForgotPassword(ForgotPasswordViewModel model)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
         {
-            if (!ModelState.IsValid)
-                return View(model);
+            if (!ModelState.IsValid) return View(model);
 
-            using (var connection = _context.Database.GetDbConnection())
+            var email = model.Email.Trim().ToLowerInvariant();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user != null)
             {
-                connection.Open();
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = "ResetUserPassword";
-                    command.CommandType = System.Data.CommandType.StoredProcedure;
-
-                    var emailParam = command.CreateParameter();
-                    emailParam.ParameterName = "userEmail";
-                    emailParam.Value = model.Email;
-                    command.Parameters.Add(emailParam);
-
-                    var passwordParam = command.CreateParameter();
-                    passwordParam.ParameterName = "newPassword";
-                    passwordParam.Value = model.NewPassword;
-                    command.Parameters.Add(passwordParam);
-
-                    command.ExecuteNonQuery();
-                }
+                user.Password = _passwordHasher.HashPassword(user, model.NewPassword);
+                await _context.SaveChangesAsync();
             }
 
-            TempData["ToastMessage"] = "Password reset successfully.";
+            // Generic response avoids disclosing whether an account exists.
+            TempData["ToastMessage"] = "If the account exists, the password has been reset.";
             TempData["ToastType"] = "success";
-            return RedirectToAction("Login");
+            return RedirectToAction(nameof(Login));
         }
 
-        public IActionResult Register()
-        {
-            return View();
-        }
+        [HttpGet]
+        public IActionResult Register() => View();
 
         [HttpPost]
-        public IActionResult Register(RegisterViewModel model)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Register(RegisterViewModel model)
         {
-            if (!ModelState.IsValid)
-                return View(model);
+            if (!ModelState.IsValid) return View(model);
 
-            var existingUser = _context.Users.FirstOrDefault(u => u.Email == model.Email);
-            if (existingUser != null)
+            var email = model.Email.Trim().ToLowerInvariant();
+            if (await _context.Users.AnyAsync(u => u.Email == email))
             {
-                TempData["ToastMessage"] = "Email already registered.";
-                TempData["ToastType"] = "warning";
+                ModelState.AddModelError(nameof(model.Email), "Email is already registered.");
                 return View(model);
             }
 
-            using (var connection = _context.Database.GetDbConnection())
+            var user = new User
             {
-                connection.Open();
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = "RegisterUser";
-                    command.CommandType = CommandType.StoredProcedure;
+                FullName = model.FullName.Trim(),
+                Email = email,
+                Role = "User"
+            };
+            user.Password = _passwordHasher.HashPassword(user, model.Password);
 
-                    var param1 = command.CreateParameter();
-                    param1.ParameterName = "fullName";
-                    param1.Value = model.FullName;
-                    command.Parameters.Add(param1);
-
-                    var param2 = command.CreateParameter();
-                    param2.ParameterName = "userEmail";
-                    param2.Value = model.Email;
-                    command.Parameters.Add(param2);
-
-                    var param3 = command.CreateParameter();
-                    param3.ParameterName = "userPassword";
-                    param3.Value = model.Password;
-                    command.Parameters.Add(param3);
-
-                    command.ExecuteNonQuery();
-                }
-            }
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
 
             TempData["ToastMessage"] = "Registration successful. You can now log in.";
             TempData["ToastType"] = "success";
-            return RedirectToAction("Login");
+            return RedirectToAction(nameof(Login));
         }
     }
 }
-
