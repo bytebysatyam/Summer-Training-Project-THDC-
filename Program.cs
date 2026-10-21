@@ -28,6 +28,28 @@ builder.Services.AddSingleton(typeof(IConverter), new SynchronizedConverter(new 
 
 var app = builder.Build();
 
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.EnsureCreatedAsync();
+
+    var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>();
+    const string adminEmail = "admin@training.local";
+    if (!await db.Users.AnyAsync(u => u.Email == adminEmail))
+    {
+        var admin = new User
+        {
+            FullName = "Training Admin",
+            Email = adminEmail,
+            Role = "Admin"
+        };
+        admin.Password = hasher.HashPassword(admin, "TrainingAdmin123!");
+        db.Users.Add(admin);
+        await db.SaveChangesAsync();
+    }
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
