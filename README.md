@@ -1,182 +1,127 @@
 # Complaint & Leave Management System
 
-A role-based web application developed during my summer training with the IT Department at THDC India Limited.
+A role-based ASP.NET Core MVC training project developed during my summer training with the IT Department at THDC India Limited.
 
-The project focuses on two internal workflows: employee complaint management and leave application/approval. It was built as a training project using ASP.NET Core MVC, C#, Entity Framework Core, and MySQL.
+> This is a portfolio/training project, not an official THDC India Limited product.
 
-> **Portfolio note:** This repository is shared to demonstrate my engineering work completed during industrial training. It is not an official THDC India Limited product. Any organization-specific branding, confidential information, credentials, or sensitive data should be excluded from the public repository.
+## End-to-end workflows
 
-## Core Features
+### Employee
+- Register and log in
+- Passwords are stored with ASP.NET Core password hashing
+- Submit a complaint
+- View only their own complaints
+- Edit a complaint while it is still pending
+- View the admin response and final status
+- Submit a leave application
+- View only their own leave requests and decisions
 
-### Authentication & User Access
-- User registration and login
-- Session-based login tracking
-- Role-aware user/admin flows
-- Form validation through view models
+### Admin
+- Protected admin dashboard
+- Review all complaints
+- Respond and mark complaints Resolved or Rejected
+- Review leave applications
+- Approve or reject leave requests
+- Export complaint and leave reports as PDF
 
-### Complaint Management
-- Submit complaints
-- View user-specific complaints
-- Administrative complaint review
-- Admin response workflow
-- Complaint status handling
+## Stack
 
-### Leave Management
-- Submit leave applications
-- Store leave request details
-- Administrative approval/review workflow
+- ASP.NET Core MVC / .NET 8
+- C#
+- Entity Framework Core
+- MySQL 8
+- Razor Views
+- Bootstrap
+- ASP.NET Core Session
+- ASP.NET Core PasswordHasher
 
-### Administration
-- Admin controller for privileged workflows
-- Dashboard-oriented views
-- Central access to complaint and leave records
+PDF reports use a small managed PDF writer included in the repository, so there is no external wkhtmltopdf/native runtime dependency.
 
-### PDF Support
-- PDF-related controller and DinkToPdf integration are included in the project structure
+## Quick start
 
-## Tech Stack
+### Option A: Docker for MySQL
 
-| Layer | Technology |
-| --- | --- |
-| Framework | ASP.NET Core MVC (.NET 8) |
-| Language | C# |
-| Database | MySQL |
-| ORM | Entity Framework Core |
-| MySQL Provider | Pomelo.EntityFrameworkCore.MySql |
-| Session | ASP.NET Core Session |
-| PDF Integration | DinkToPdf |
-| Frontend | Razor Views / HTML / CSS / Bootstrap-style MVC UI |
-
-## Application Flow
-
-```text
-User Registration / Login
-          ↓
-   Session Created
-          ↓
- ┌────────┴─────────┐
- │                  │
- ▼                  ▼
-Complaint          Leave
-Workflow           Workflow
- │                  │
- ▼                  ▼
-Database           Database
- │                  │
- └────────┬─────────┘
-          ▼
-      Admin Review
-          ↓
- Response / Approval
-```
-
-## Project Structure
-
-```text
-Controllers/
-├── AccountController.cs
-├── AdminController.cs
-├── ComplaintController.cs
-├── HomeController.cs
-├── LeaveController.cs
-└── PdfController.cs
-
-Data/
-└── ApplicationDbContext.cs
-
-Models/
-├── ApplicationUser.cs
-├── Complaint.cs
-├── LeaveApplication.cs
-├── LoginViewModel.cs
-├── RegisterViewModel.cs
-└── ...
-
-Views/
-Program.cs
-WebPage.csproj
-```
-
-## Engineering Highlights
-
-- Structured the application using the MVC pattern
-- Used Entity Framework Core with MySQL for persistence
-- Implemented session-based authentication flow
-- Separated complaint and leave logic into dedicated controllers
-- Added admin-facing workflows for operational review
-- Used view models for login, registration, and related form handling
-- Integrated PDF tooling into the application stack
-
-## Getting Started
-
-### Prerequisites
-
-- .NET 8 SDK
-- MySQL 8.x
-- Visual Studio 2022 or VS Code with C# tooling
-
-### Clone the repository
+Requirements: .NET 8 SDK and Docker Desktop.
 
 ```bash
-git clone https://github.com/bytebysatyam/Summer-Training-Project-THDC-.git
-cd Summer-Training-Project-THDC-
-```
-
-### Configure the database
-
-Add a local MySQL connection string in your development configuration using the `DefaultConnection` key expected by `Program.cs`.
-
-Example structure:
-
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "server=localhost;database=your_database;user=your_user;password=your_password"
-  }
-}
-```
-
-Do not commit real database credentials.
-
-### Restore dependencies
-
-```bash
+docker compose up -d mysql
 dotnet restore
-```
-
-### Run the application
-
-```bash
 dotnet run
 ```
 
-The default MVC route opens the account login flow.
+The development connection string matches the disposable Docker database. On first development startup the app creates the required schema automatically.
 
-## Current Limitations
+Open the HTTPS/HTTP URL printed by `dotnet run`.
 
-- The project was built for training/learning purposes rather than as a production deployment.
-- Session-based authentication is intentionally simple and can be upgraded to a stronger identity/authentication architecture.
-- Deployment configuration should be reviewed before production use.
-- Organization-specific visuals or sample data should be sanitized before public sharing.
+### Demo admin
 
-## Future Improvements
+Development startup creates a synthetic local admin if it does not already exist:
 
-- Replace custom session auth with ASP.NET Core Identity
-- Add stronger role/permission enforcement
-- Add audit logging
-- Add automated tests for controllers and services
-- Improve error handling and validation
-- Add pagination/filtering for admin views
-- Containerize the application for reproducible deployment
-- Add CI checks for build and tests
+```text
+Email: admin@training.local
+Password: TrainingAdmin123!
+```
+
+This account is for local demonstration only. Do not reuse these credentials anywhere else.
+
+Normal users should register through the UI.
+
+## Existing older local database
+
+Earlier versions of this training project stored passwords as plaintext. The current login flow can accept a matching legacy password once and immediately upgrades it to an ASP.NET Core password hash.
+
+The former hard-coded personal MySQL password has been removed from the current source. If that password was ever used outside a disposable local database, rotate it because Git history may still contain the old value.
+
+## Security improvements in the current version
+
+- Server-side session checks protect user workflows.
+- Every admin action verifies the Admin session role.
+- Complaint ownership is enforced before edits.
+- Leave identity is taken from the logged-in session rather than trusted form fields.
+- POST actions use anti-forgery validation.
+- Passwords are hashed.
+- Registration and reset no longer depend on external stored procedures.
+- Admin PDF exports are protected.
+- Local database credentials are explicitly disposable development values.
+
+## Build verification
+
+```bash
+dotnet restore WebPage.sln
+dotnet build WebPage.sln --configuration Release
+```
+
+GitHub Actions runs restore + Release build for pushes and pull requests.
+
+## Project structure
+
+```text
+Controllers/
+  AccountController.cs
+  AdminController.cs
+  ComplaintController.cs
+  LeaveController.cs
+  PdfController.cs
+Data/
+Models/
+Services/
+  SimplePdf.cs
+Views/
+Program.cs
+WebPage.csproj
+docker-compose.yml
+```
+
+## Notes
+
+- Development uses `Database.EnsureCreated` for a frictionless portfolio/demo setup. A production system should use reviewed EF Core migrations.
+- Session authentication is suitable for this training project; a production deployment should use ASP.NET Core Identity/cookie authentication with hardened account recovery and operational controls.
+- THDC-branded/public-site imagery in old dashboard views is part of the training UI imitation and should not be presented as an official THDC service.
 
 ## Author
 
 **Satyam Shukla**
 
-Developed as part of industrial training at THDC India Limited.
-
-- GitHub: https://github.com/bytebysatyam
-- LinkedIn: https://www.linkedin.com/in/satyamshukla10/
-- Portfolio: https://satyam-shukla-portfolio-jet.vercel.app/
-- Email: shuklasatyam48890@gmail.com
+GitHub: https://github.com/bytebysatyam  
+LinkedIn: https://www.linkedin.com/in/satyamshukla10/  
+Portfolio: https://satyam-shukla-portfolio-jet.vercel.app/
