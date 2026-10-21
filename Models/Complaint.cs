@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace WebPage.Models
 {
@@ -6,17 +6,17 @@ namespace WebPage.Models
     {
         public int Id { get; set; }
 
-        [Required]
-        public string? Subject { get; set; }
+        [Required, StringLength(150)]
+        public string Subject { get; set; } = string.Empty;
 
-        [Required]
-        public string? Description { get; set; }
+        [Required, StringLength(4000)]
+        public string Description { get; set; } = string.Empty;
 
+        [EmailAddress]
         public string? UserEmail { get; set; }
 
-        public DateTime DateCreated { get; set; } = DateTime.Now;  // ✅ Default value
+        public DateTime DateCreated { get; set; } = DateTime.UtcNow;
         public string? AdminResponse { get; set; }
-        public string Status { get; set; }
+        public string Status { get; set; } = "Pending";
     }
-
 }

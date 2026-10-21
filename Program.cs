@@ -1,28 +1,52 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Pomelo.EntityFrameworkCore.MySql;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using WebPage.Data;
-using DinkToPdf;
-using DinkToPdf.Contracts;
-
+using WebPage.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// MySQL connection
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseMySql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        new MySqlServerVersion(new Version(8, 0, 42))
-    ));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required.");
 
-// Session and MVC
-builder.Services.AddSession();
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+
 builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
+});
 builder.Services.AddControllersWithViews();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddSingleton(typeof(IConverter), new SynchronizedConverter(new PdfTools()));
+builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+
 var app = builder.Build();
 
-// Middleware
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.EnsureCreatedAsync();
+
+    var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>();
+    const string adminEmail = "admin@training.local";
+    if (!await db.Users.AnyAsync(u => u.Email == adminEmail))
+    {
+        var admin = new User
+        {
+            FullName = "Training Admin",
+            Email = adminEmail,
+            Role = "Admin"
+        };
+        admin.Password = hasher.HashPassword(admin, "TrainingAdmin123!");
+        db.Users.Add(admin);
+        await db.SaveChangesAsync();
+    }
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -31,14 +55,13 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
 app.UseRouting();
-app.UseSession(); // 👈 Required for login tracking
+app.UseSession();
 
-// Default route
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Account}/{action=Login}/{id?}");
 
-
 app.Run();
+
+public partial class Program { }

@@ -1,9 +1,7 @@
-﻿@model Complaint
+@model Complaint
 
 <style>
-    body {
-        background-color: cornflowerblue;
-    }
+    body { background-color: cornflowerblue; }
 </style>
 
 <div class="container my-5">
@@ -13,25 +11,27 @@
         </div>
         <div class="card-body bg-white">
             <form asp-action="Respond" method="post">
-                <input type="hidden" asp-for="Id" />
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
 
                 <div class="mb-3">
                     <label class="form-label">Subject</label>
-                    <input class="form-control" asp-for="Subject" readonly />
+                    <input class="form-control" value="@Model.Subject" readonly />
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Description</label>
-                    <textarea class="form-control" asp-for="Description" rows="3" readonly></textarea>
+                    <textarea class="form-control" rows="3" readonly>@Model.Description</textarea>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Admin Response</label>
-                    <textarea class="form-control" asp-for="AdminResponse" rows="4" required placeholder="Enter your response here..."></textarea>
+                    <textarea class="form-control" name="adminResponse" rows="4" required placeholder="Enter your response here...">@Model.AdminResponse</textarea>
                 </div>
+
                 <div class="mb-4">
-                    <label asp-for="Status" class="form-label">Status</label>
-                    <select asp-for="Status" class="form-select">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select" required>
                         <option value="">-- Select Status --</option>
                         <option value="Resolved">Resolved</option>
                         <option value="Rejected">Rejected</option>

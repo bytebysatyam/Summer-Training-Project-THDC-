@@ -1,67 +1,52 @@
-﻿using DinkToPdf;
-using DinkToPdf.Contracts;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using WebPage.Data;
-using System.Text;
+using WebPage.Services;
 
 public class PdfController : Controller
 {
     private readonly ApplicationDbContext _context;
-    private readonly IConverter _converter;
 
-    public PdfController(ApplicationDbContext context, IConverter converter)
+    public PdfController(ApplicationDbContext context) => _context = context;
+
+    private bool IsAdmin => HttpContext.Session.GetString("UserRole") == "Admin";
+
+    private IActionResult? RequireAdmin()
     {
-        _context = context;
-        _converter = converter;
+        if (string.IsNullOrWhiteSpace(HttpContext.Session.GetString("UserEmail")))
+            return RedirectToAction("Login", "Account");
+        return IsAdmin ? null : Forbid();
     }
 
-    public IActionResult ExportComplaints()
+    public async Task<IActionResult> ExportComplaints()
     {
-        var complaints = _context.Complaints.ToList();
+        var denied = RequireAdmin();
+        if (denied != null) return denied;
 
-        var html = new StringBuilder();
-        html.Append("<h2 style='text-align:center;'>Complaints Report</h2>");
-        html.Append("<table border='1' width='100%' cellpadding='5'><tr><th>ID</th><th>Title</th><th>Status</th><th>Date</th></tr>");
+        var complaints = await _context.Complaints
+            .OrderByDescending(c => c.DateCreated)
+            .ToListAsync();
 
-        foreach (var c in complaints)
-        {
-            html.Append($"<tr><td>{c.Id}</td><td>{c.Subject}</td><td>{c.Status}</td><td>{c.DateCreated.ToShortDateString()}</td></tr>");
-        }
+        var lines = complaints.Select(c =>
+            $"#{c.Id} | {c.Subject} | {c.Status} | {c.DateCreated:dd-MMM-yyyy}");
 
-        html.Append("</table>");
-
-        var doc = new HtmlToPdfDocument()
-        {
-            GlobalSettings = { PaperSize = PaperKind.A4, Orientation = Orientation.Portrait },
-            Objects = { new ObjectSettings { HtmlContent = html.ToString() } }
-        };
-
-        var pdf = _converter.Convert(doc);
+        var pdf = SimplePdf.Create(lines, "Complaints Report");
         return File(pdf, "application/pdf", "ComplaintsReport.pdf");
     }
 
-    public IActionResult ExportLeaves()
+    public async Task<IActionResult> ExportLeaves()
     {
-        var leaves = _context.LeaveApplications.ToList();
+        var denied = RequireAdmin();
+        if (denied != null) return denied;
 
-        var html = new StringBuilder();
-        html.Append("<h2 style='text-align:center;'>Leave Applications Report</h2>");
-        html.Append("<table border='1' width='100%' cellpadding='5'><tr><th>ID</th><th>Full Name</th><th>From</th><th>To</th><th>Reason</th><th>Status</th></tr>");
+        var leaves = await _context.LeaveApplications
+            .OrderByDescending(l => l.AppliedOn)
+            .ToListAsync();
 
-        foreach (var l in leaves)
-        {
-            html.Append($"<tr><td>{l.Id}</td><td>{l.FullName}</td><td>{l.StartDate:dd-MMM-yyyy}</td><td>{l.EndDate:dd-MMM-yyyy}</td><td>{l.Reason}</td><td>{l.Status}</td></tr>");
-        }
+        var lines = leaves.Select(l =>
+            $"#{l.Id} | {l.FullName} | {l.StartDate:dd-MMM-yyyy} to {l.EndDate:dd-MMM-yyyy} | {l.Status}");
 
-        html.Append("</table>");
-
-        var doc = new HtmlToPdfDocument()
-        {
-            GlobalSettings = { PaperSize = PaperKind.A4, Orientation = Orientation.Portrait },
-            Objects = { new ObjectSettings { HtmlContent = html.ToString() } }
-        };
-
-        var pdf = _converter.Convert(doc);
+        var pdf = SimplePdf.Create(lines, "Leave Applications Report");
         return File(pdf, "application/pdf", "LeavesReport.pdf");
     }
 }
