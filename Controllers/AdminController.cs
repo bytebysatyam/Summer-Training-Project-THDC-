@@ -1,91 +1,97 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WebPage.Data;
-using WebPage.Models;
 
 public class AdminController : Controller
 {
     private readonly ApplicationDbContext _context;
 
-    public AdminController(ApplicationDbContext context)
+    public AdminController(ApplicationDbContext context) => _context = context;
+
+    private bool IsAdmin => HttpContext.Session.GetString("UserRole") == "Admin";
+
+    private IActionResult? RequireAdmin()
     {
-        _context = context;
+        if (string.IsNullOrWhiteSpace(HttpContext.Session.GetString("UserEmail")))
+            return RedirectToAction("Login", "Account");
+        return IsAdmin ? null : Forbid();
     }
+
     public IActionResult Dashboard()
     {
-        return View();
+        var denied = RequireAdmin();
+        return denied ?? View();
     }
 
-    public IActionResult Complaints()
+    public async Task<IActionResult> Complaints()
     {
-        var role = HttpContext.Session.GetString("UserRole");
-        if (role != "Admin")
-        {
-            return Unauthorized(); // Prevent non-admin access
-        }
+        var denied = RequireAdmin();
+        if (denied != null) return denied;
 
-        var complaints = _context.Complaints.ToList();
-        return View(complaints);
+        return View(await _context.Complaints.OrderByDescending(c => c.DateCreated).ToListAsync());
     }
-    // GET: Admin/Respond/5
-    public IActionResult Respond(int id)
+
+    [HttpGet]
+    public async Task<IActionResult> Respond(int id)
     {
-        var complaint = _context.Complaints.FirstOrDefault(c => c.Id == id);
-        if (complaint == null)
-        {
-            return NotFound();
-        }
-        return View(complaint);
+        var denied = RequireAdmin();
+        if (denied != null) return denied;
+
+        var complaint = await _context.Complaints.FirstOrDefaultAsync(c => c.Id == id);
+        return complaint == null ? NotFound() : View(complaint);
     }
 
-    // POST: Admin/Respond
     [HttpPost]
-    public IActionResult Respond(Complaint updatedComplaint)
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Respond(int id, string adminResponse, string status)
     {
-        var complaint = _context.Complaints.FirstOrDefault(c => c.Id == updatedComplaint.Id);
-        if (complaint == null)
+        var denied = RequireAdmin();
+        if (denied != null) return denied;
+
+        if (string.IsNullOrWhiteSpace(adminResponse) || (status != "Resolved" && status != "Rejected"))
         {
-            TempData["ToastMessage"] = "Complaint not found.";
-            TempData["ToastType"] = "danger";
-            return NotFound();
+            TempData["ToastMessage"] = "Response and a valid status are required.";
+            TempData["ToastType"] = "warning";
+            return RedirectToAction(nameof(Respond), new { id });
         }
 
-        complaint.AdminResponse = updatedComplaint.AdminResponse;
-        complaint.Status = updatedComplaint.Status;
-        _context.SaveChanges();
+        var complaint = await _context.Complaints.FirstOrDefaultAsync(c => c.Id == id);
+        if (complaint == null) return NotFound();
 
-        // ✅ Toast for response submitted
+        complaint.AdminResponse = adminResponse.Trim();
+        complaint.Status = status;
+        await _context.SaveChangesAsync();
+
         TempData["ToastMessage"] = "Response submitted successfully!";
         TempData["ToastType"] = "success";
+        return RedirectToAction(nameof(Complaints));
+    }
 
-        return RedirectToAction("Complaints");
-    }
-    public IActionResult LeaveRequests()
+    public async Task<IActionResult> LeaveRequests()
     {
-        var leaves = _context.LeaveApplications
-            .OrderByDescending(l => l.AppliedOn)
-            .ToList();
-        return View(leaves);
+        var denied = RequireAdmin();
+        if (denied != null) return denied;
+
+        return View(await _context.LeaveApplications.OrderByDescending(l => l.AppliedOn).ToListAsync());
     }
+
     [HttpPost]
-    public IActionResult UpdateStatus(int id, string status)
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateStatus(int id, string status)
     {
-        var leave = _context.LeaveApplications.FirstOrDefault(l => l.Id == id);
-        if (leave != null && (status == "Approved" || status == "Rejected"))
-        {
-            leave.Status = status;
-            _context.SaveChanges();
-            // ✅ Toast for leave status update
-            TempData["ToastMessage"] = $"Leave {status}!";
-            TempData["ToastType"] = status == "Approved" ? "success" : "danger";
-        }
-        else
-        {
-            TempData["ToastMessage"] = "Unable to update leave status.";
-            TempData["ToastType"] = "warning";
-        }
-        return RedirectToAction("LeaveRequests");
+        var denied = RequireAdmin();
+        if (denied != null) return denied;
+
+        if (status != "Approved" && status != "Rejected") return BadRequest();
+
+        var leave = await _context.LeaveApplications.FirstOrDefaultAsync(l => l.Id == id);
+        if (leave == null) return NotFound();
+
+        leave.Status = status;
+        await _context.SaveChangesAsync();
+
+        TempData["ToastMessage"] = $"Leave {status}!";
+        TempData["ToastType"] = status == "Approved" ? "success" : "danger";
+        return RedirectToAction(nameof(LeaveRequests));
     }
-
 }
-
