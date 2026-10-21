@@ -2,13 +2,33 @@ name: CI
 
 on:
   push:
-    branches: ["master", "fix/**"]
+    branches: ["master", "fix/**", "test/**"]
   pull_request:
     branches: ["master"]
 
 jobs:
-  build:
+  build-and-smoke:
     runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: thdc_ci_password
+          MYSQL_DATABASE: thdc_training
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pthdc_ci_password"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: server=127.0.0.1;port=3306;database=thdc_training;user=root;password=thdc_ci_password
+      ASPNETCORE_URLS: http://127.0.0.1:5055
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,3 +43,125 @@ jobs:
 
       - name: Build
         run: dotnet build WebPage.sln --configuration Release --no-restore
+
+      - name: Start application
+        shell: bash
+        run: |
+          nohup dotnet run --project WebPage.csproj --configuration Release --no-build > app.log 2>&1 &
+          echo $! > app.pid
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:5055/Account/Login >/dev/null; then
+              echo "Application started"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat app.log
+          exit 1
+
+      - name: End-to-end smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="http://127.0.0.1:5055"
+          USER_EMAIL="ci.user@example.com"
+          USER_PASSWORD="StrongPass123!"
+
+          token() {
+            python - "$1" <<'PY'
+          import re, sys
+          html = open(sys.argv[1], encoding="utf-8").read()
+          m = re.search(r'name="__RequestVerificationToken"[^>]*value="([^"]+)"', html)
+          if not m:
+              m = re.search(r'value="([^"]+)"[^>]*name="__RequestVerificationToken"', html)
+          if not m:
+              raise SystemExit("anti-forgery token not found")
+          print(m.group(1))
+          PY
+          }
+
+          # Register employee
+          curl -fsS -c user.cookies "$BASE/Account/Register" -o register.html
+          REG_TOKEN="$(token register.html)"
+          curl -fsS -b user.cookies -c user.cookies -L             -d "__RequestVerificationToken=$REG_TOKEN"             --data-urlencode "FullName=CI Test User"             --data-urlencode "Email=$USER_EMAIL"             --data-urlencode "Password=$USER_PASSWORD"             --data-urlencode "ConfirmPassword=$USER_PASSWORD"             "$BASE/Account/Register" -o after-register.html
+          grep -q "Login Here" after-register.html
+
+          # Login employee
+          curl -fsS -b user.cookies -c user.cookies "$BASE/Account/Login" -o login.html
+          LOGIN_TOKEN="$(token login.html)"
+          curl -fsS -b user.cookies -c user.cookies -L             -d "__RequestVerificationToken=$LOGIN_TOKEN"             --data-urlencode "Email=$USER_EMAIL"             --data-urlencode "Password=$USER_PASSWORD"             "$BASE/Account/Login" -o user-dashboard.html
+          grep -q "CI Test User" user-dashboard.html
+
+          # Submit complaint
+          curl -fsS -b user.cookies -c user.cookies "$BASE/Complaint/Create" -o complaint-form.html
+          COMPLAINT_TOKEN="$(token complaint-form.html)"
+          curl -fsS -b user.cookies -c user.cookies -L             -d "__RequestVerificationToken=$COMPLAINT_TOKEN"             --data-urlencode "Subject=CI smoke complaint"             --data-urlencode "Description=End-to-end complaint workflow verification"             "$BASE/Complaint/Create" -o my-complaints.html
+          grep -q "CI smoke complaint" my-complaints.html
+
+          # Submit leave
+          curl -fsS -b user.cookies -c user.cookies "$BASE/Leave/Apply" -o leave-form.html
+          LEAVE_TOKEN="$(token leave-form.html)"
+          TODAY="$(date +%F)"
+          TOMORROW="$(date -d '+1 day' +%F)"
+          curl -fsS -b user.cookies -c user.cookies -L             -d "__RequestVerificationToken=$LEAVE_TOKEN"             --data-urlencode "FullName=CI Test User"             --data-urlencode "Email=$USER_EMAIL"             --data-urlencode "LeaveType=Casual"             --data-urlencode "StartDate=$TODAY"             --data-urlencode "EndDate=$TOMORROW"             --data-urlencode "Reason=CI workflow test"             "$BASE/Leave/Apply" -o my-leaves.html
+          grep -q "CI workflow test" my-leaves.html
+
+          # Login admin
+          curl -fsS -c admin.cookies "$BASE/Account/Login" -o admin-login.html
+          ADMIN_TOKEN="$(token admin-login.html)"
+          curl -fsS -b admin.cookies -c admin.cookies -L             -d "__RequestVerificationToken=$ADMIN_TOKEN"             --data-urlencode "Email=admin@training.local"             --data-urlencode "Password=TrainingAdmin123!"             "$BASE/Account/Login" -o admin-dashboard.html
+          grep -q "Manage Complaints" admin-dashboard.html
+
+          # Admin complaint list and response
+          curl -fsS -b admin.cookies "$BASE/Admin/Complaints" -o admin-complaints.html
+          grep -q "CI smoke complaint" admin-complaints.html
+          COMPLAINT_ID="$(python - <<'PY'
+          import re
+          html=open("admin-complaints.html",encoding="utf-8").read()
+          m=re.search(r'/Admin/Respond/([0-9]+)|/Admin/Respond\?id=([0-9]+)',html,re.I)
+          if not m: raise SystemExit("complaint id not found")
+          print(next(g for g in m.groups() if g))
+          PY
+          )"
+          curl -fsS -b admin.cookies -c admin.cookies "$BASE/Admin/Respond/$COMPLAINT_ID" -o respond.html
+          RESPOND_TOKEN="$(token respond.html)"
+          curl -fsS -b admin.cookies -c admin.cookies -L             -d "__RequestVerificationToken=$RESPOND_TOKEN"             --data-urlencode "id=$COMPLAINT_ID"             --data-urlencode "adminResponse=Verified by CI admin"             --data-urlencode "status=Resolved"             "$BASE/Admin/Respond" -o admin-complaints-after.html
+          grep -q "Resolved" admin-complaints-after.html
+
+          # Admin approve leave
+          curl -fsS -b admin.cookies -c admin.cookies "$BASE/Admin/LeaveRequests" -o admin-leaves.html
+          grep -q "CI workflow test" admin-leaves.html
+          LEAVE_ID="$(python - <<'PY'
+          import re
+          html=open("admin-leaves.html",encoding="utf-8").read()
+          m=re.search(r'name="id" value="([0-9]+)"',html)
+          if not m: raise SystemExit("leave id not found")
+          print(m.group(1))
+          PY
+          )"
+          LEAVE_ADMIN_TOKEN="$(token admin-leaves.html)"
+          curl -fsS -b admin.cookies -c admin.cookies -L             -d "__RequestVerificationToken=$LEAVE_ADMIN_TOKEN"             --data-urlencode "id=$LEAVE_ID"             --data-urlencode "status=Approved"             "$BASE/Admin/UpdateStatus" -o admin-leaves-after.html
+          grep -q "Approved" admin-leaves-after.html
+
+          # Employee sees final states
+          curl -fsS -b user.cookies "$BASE/Complaint/MyComplaints" -o user-complaints-final.html
+          grep -q "Verified by CI admin" user-complaints-final.html
+          grep -q "Resolved" user-complaints-final.html
+
+          curl -fsS -b user.cookies "$BASE/Leave/MyLeaveStatus" -o user-leaves-final.html
+          grep -q "Approved" user-leaves-final.html
+
+          # Protected PDF exports
+          curl -fsS -b admin.cookies "$BASE/Pdf/ExportComplaints" -o complaints.pdf
+          curl -fsS -b admin.cookies "$BASE/Pdf/ExportLeaves" -o leaves.pdf
+          head -c 5 complaints.pdf | grep -q "%PDF-"
+          head -c 5 leaves.pdf | grep -q "%PDF-"
+
+          echo "All end-to-end smoke checks passed."
+
+      - name: Upload app log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-log
+          path: app.log
