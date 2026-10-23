@@ -28,6 +28,9 @@ jobs:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: server=127.0.0.1;port=3306;database=thdc_training;user=root;password=thdc_ci_password
       ASPNETCORE_URLS: http://127.0.0.1:5055
+      DEMO_ADMIN_ENABLED: "true"
+      DEMO_ADMIN_EMAIL: admin@training.local
+      DEMO_ADMIN_PASSWORD: ${{ secrets.CI_ADMIN_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -66,6 +69,7 @@ jobs:
           BASE="http://127.0.0.1:5055"
           USER_EMAIL="ci.user@example.com"
           USER_PASSWORD="StrongPass123!"
+          ADMIN_PASSWORD="$DEMO_ADMIN_PASSWORD"
 
           token() {
             python - "$1" <<'PY'
@@ -109,7 +113,7 @@ jobs:
           # Login admin
           curl -fsS -c admin.cookies "$BASE/Account/Login" -o admin-login.html
           ADMIN_TOKEN="$(token admin-login.html)"
-          curl -fsS -b admin.cookies -c admin.cookies -L             -d "__RequestVerificationToken=$ADMIN_TOKEN"             --data-urlencode "Email=admin@training.local"             --data-urlencode "Password=TrainingAdmin123!"             "$BASE/Account/Login" -o admin-dashboard.html
+          curl -fsS -b admin.cookies -c admin.cookies -L             -d "__RequestVerificationToken=$ADMIN_TOKEN"             --data-urlencode "Email=admin@training.local"             --data-urlencode "Password=$ADMIN_PASSWORD"             "$BASE/Account/Login" -o admin-dashboard.html
           grep -q "Manage Complaints" admin-dashboard.html
 
           # Admin complaint list and response
